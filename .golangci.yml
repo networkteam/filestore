@@ -1,0 +1,254 @@
+run:
+  concurrency: 4
+  timeout: 5m
+  tests: true
+
+output:
+  format: line-number
+
+linters:
+  # Disable all linters, so we enable linters explicitly
+  disable-all: true
+
+  enable:
+    ### Default linters for golangci-lint
+    # Errcheck is a program for checking for unchecked errors in go programs. These unchecked errors can be critical bugs in some cases
+    - errcheck
+    # Linter for Go source code that specializes in simplifying code
+    - gosimple
+    # Vet examines Go source code and reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
+    - govet
+    # Detects when assignments to existing variables are not used
+    - ineffassign
+    # It's a set of rules from staticcheck
+    - staticcheck
+    # Like the front-end of a Go compiler, parses and type-checks Go code
+    - typecheck
+    # Checks Go code for unused constants, variables, functions and types
+    - unused
+
+    ### Additional linters
+    # Check for pass []any as any in variadic func(...any)
+    - asasalint
+    # Simple linter to check that your code does not contain non-ASCII identifiers
+    - asciicheck
+    # Checks for dangerous unicode character sequences
+    - bidichk
+    # Checks whether HTTP response body is closed successfully
+    - bodyclose
+    # A linter that detects struct contained context.Context field
+    - containedctx
+    # Check whether the function uses a non-inherited context
+    - contextcheck
+    # Disable cyclomatic complexity - it doesn't help much, because of many error handling conditionals
+    # - cyclop
+    # Disable declaration order style check
+    # - decorder
+    # Go linter that checks if package imports are in a list of acceptable packages
+    - depguard
+    # Disable dogsled style check
+    # - dogsled
+    # Disable duplicate code style check because of false positives
+    # - dupl
+    # Disable duplicate word checks in comments
+    # - dupword
+    # Check for two durations multiplied together
+    - durationcheck
+    # Checks types passed to the json encoding functions
+    - errchkjson
+    # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
+    - errname
+    # A linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13.
+    - errorlint
+    # Disable execinquery
+    # - execinquery
+    # Check exhaustiveness of enum switch statements
+    - exhaustive
+    # Disable exhaustruct since we want to have struct literals with default values
+    # - exhaustruct
+    # Checks for pointers to enclosing loop variables
+    - exportloopref
+    # Forbids identifiers (e.g. fmt.Println) from being used
+    - forbidigo
+    # Finds forced type assertions
+    - forcetypeassert
+    # Disable funlen because we don't want to limit function length to a fixed length
+    # - funlen
+    # This analyzer checks for global variables and errors on any found.
+    - gochecknoglobals
+    # Checks that no init functions are present in Go code
+    - gochecknoinits
+    # Computes and checks the cognitive complexity of functions
+    - gocognit
+    # Finds repeated strings that could be replaced by a constant
+    - goconst
+    # Provides diagnostics that check for bugs, performance and style issues
+    - gocritic
+    # Disable gocyclo because we already use gocognit
+    # - gocyclo
+    # Enforce the comments as full sentences internally
+    - godot
+    # Check for TODOs
+    - godox
+    # Golang linter to check the errors handling expressions
+    - goerr113
+    # Disable gofmt
+    # - gofmt
+    # Disable gofumpt
+    # - gofumpt
+    # Disable goheader
+    - goheader
+    # Disable goimports
+    # - goimports
+    # Disable gomnd (magic numbers) for now - too many false positives, but good idea to have
+    # - gomnd
+    # Disable gomoddirectives
+    # - gomoddirectives
+    # Disable gomodguard
+    # - gomodguard
+    # Checks that printf-like functions are named with f at the end
+    - goprintffuncname
+    # Inspects source code for security problems
+    - gosec
+    # An analyzer to analyze expression groups
+    - grouper
+    # Enforces consistent import aliases
+    - importas
+    # A linter that checks the number of methods inside an interface
+    - interfacebloat
+    # Disable ireturn
+    # - ireturn
+    # Disable lll
+    # - lll
+    # Disable loggercheck
+    # - loggercheck
+    # Measures the maintainability index of each function
+    - maintidx
+    # Finds slice declarations with non-zero initial length
+    - makezero
+    # Finds commonly misspelled English words in comments
+    - misspell
+    # Finds naked returns in functions greater than a specified function length
+    - nakedret
+    # Disable nestif
+    # - nestif
+    # Finds code that returns nil even if it checks that the error is not nil
+    - nilerr
+    # Disable nilnil
+    # - nilnil
+    # Disable nlreturn
+    # - nlreturn
+    # Finds sending http request without context.Context
+    - noctx
+    # Reports ill-formed or insufficient nolint directives
+    - nolintlint
+    # Disable nonamedreturns
+    # - nonamedreturns
+    # Checks for misuse of Sprintf to construct a host with port in a URL
+    - nosprintfhostport
+    # Disable paralleltest
+    # - paralleltest
+    # Finds slice declarations that could potentially be pre-allocated
+    - prealloc
+    # Find code that shadows one of Go's predeclared identifiers
+    - predeclared
+    # Disable promlinter
+    # - promlinter
+    # Checks that package variables are not reassigned
+    - reassign
+    # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
+    - revive
+    # Disable rowserrcheck because of generics
+    # - rowserrcheck
+    # Disable sqlclosecheck because of generics
+    # - sqlclosecheck
+    # Disable stylecheck because it duplicates checks of revive
+    # - stylecheck
+    # Checks the naming convention of fields in struct tags
+    - tagliatelle
+    # Analyzer that detects using os.Setenv instead of t.Setenv
+    - tenv
+    # Disable testableexamples because we have none
+    # - testableexamples
+    # Check tests are defined in a separate test package (_test) # TODO This is currently broken in golangci-lint
+    - testpackage
+    # Detects golang test helpers without t.Helper() call and checks the consistency of test helpers
+    - thelper
+    # Disable tparallel
+    # - tparallel
+    # Remove unnecessary type conversions
+    - unconvert
+    # Reports unused function parameters
+    - unparam
+    # A linter that detect the possibility to use variables/constants from the Go standard library
+    - usestdlibvars
+    # Checks that the length of a variable's name matches its scope
+    - varnamelen
+    # Disable wastedassign because of generics
+    # - wastedassign
+    # Detect leading and trailing whitespace
+    - whitespace
+    # Disable wrapcheck because of false positives with internal
+    # - wrapcheck
+    # Disable wsl because it would need too much code to be changed
+    # - wsl
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    check-shadowing: false
+  depguard:
+    include-go-root: true
+    packages-with-error-message:
+      - github.com/pkg/errors: 'use native error wrapping instead'
+      - github.com/go-errors/errors: 'use native error wrapping instead'
+      - github.com/pingcap/errors: 'use native error wrapping instead'
+      - github.com/friensofgo/errors: 'use native error wrapping instead'
+  exhaustive:
+    default-signifies-exhaustive: true
+  varnamelen:
+    # The longest distance, in source lines, that is being considered a "small scope".
+    # Variables used in at most this many lines will be ignored.
+    max-distance: 6
+    # Check named return values.
+    check-return: true
+    # Optional list of variable names that should be ignored completely.
+    ignore-names:
+      - err
+      - id
+    # Optional list of variable declarations that should be ignored completely.
+    ignore-decls:
+      - r io.Reader
+      - w io.Writer
+      - f *os.File
+      - h http.Handler
+      - r *http.Request
+      - w http.ResponseWriter
+      - c *cli.Context
+      - sb strings.Builder
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - bodyclose
+        - errcheck
+        - forcetypeassert
+        - gocognit
+        - goconst
+        - gocritic
+        - goerr113
+        - gosec
+        - maintidx
+        - prealloc
+        - revive
+        - staticcheck
+        - thelper
+        - varnamelen
+
+  include:
+    - EXC0012  # EXC0012 revive: Annoying issue about not having a comment. The rare codebase has such comments
+    - EXC0014  # EXC0014 revive: Annoying issue about not having a comment. The rare codebase has such comments
