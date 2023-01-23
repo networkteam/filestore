@@ -13,10 +13,13 @@ import (
 )
 
 const (
-	DefaultPrefixSize     = 2
+	// DefaultPrefixSize is the default path prefix size.
+	DefaultPrefixSize = 2
+	// DefaultTargetFileMode is the default file mode when storing assets.
 	DefaultTargetFileMode = 0644
 )
 
+// Local is a file store that stores files on a local filesystem.
 type Local struct {
 	tmpPath    string
 	assetsPath string
@@ -49,7 +52,6 @@ func NewLocal(tmpPath, assetsPath string) (*Local, error) {
 	}, nil
 }
 
-// Check interfaces are implemented
 var (
 	_ Storer             = &Local{}
 	_ Fetcher            = &Local{}
@@ -59,6 +61,9 @@ var (
 	_ ImgproxyURLSourcer = &Local{}
 )
 
+// Store stores the content of the reader in a local file.
+// The content is first stored in a temporary file to compute a consistent hash (SHA256)
+// and then the file is renamed to the hash in the assets path.
 func (f *Local) Store(r io.Reader) (hash string, err error) {
 	var (
 		tempFile      *os.File
@@ -93,20 +98,23 @@ func (f *Local) Store(r io.Reader) (hash string, err error) {
 		}
 	}()
 
-	// Read from uploaded file and write to temp file while simultaneously reading bytes into a SHA256 digest to calculate the hash
-	imageReader := io.TeeReader(r, tempFile)
+	// Read from given file and write to temp file while simultaneously writing into a SHA256 digest to calculate the hash on the fly
+	tmpReader := io.TeeReader(r, tempFile)
 
 	digest := sha256.New()
 
-	if _, err = io.Copy(digest, imageReader); err != nil {
-		return "", fmt.Errorf("reading uploaded file: %w", err)
+	if _, err = io.Copy(digest, tmpReader); err != nil {
+		return "", fmt.Errorf("copying reader: %w", err)
 	}
 
 	var hashBytes []byte
 	hashBytes = digest.Sum(hashBytes)
 	hashHex := hex.EncodeToString(hashBytes)
 
-	pathPrefix := f.prefixPath(hashHex)
+	pathPrefix, err := f.prefixPath(hashHex)
+	if err != nil {
+		return "", err
+	}
 
 	if err = tempFile.Close(); err != nil {
 		return "", fmt.Errorf("closing temp file: %w", err)
@@ -136,8 +144,15 @@ func (f *Local) Store(r io.Reader) (hash string, err error) {
 	return hashHex, nil
 }
 
+// Fetch returns a reader to the file with the given hash.
+// If the file does not exist, ErrNotExist is returned.
 func (f *Local) Fetch(hash string) (io.ReadCloser, error) {
-	path := fmt.Sprintf("%s/%s/%s", f.assetsPath, f.prefixPath(hash), hash)
+	prefixPath, err := f.prefixPath(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("%s/%s/%s", f.assetsPath, prefixPath, hash)
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -148,15 +163,19 @@ func (f *Local) Fetch(hash string) (io.ReadCloser, error) {
 	return file, nil
 }
 
+var errInvalidHash = errors.New("invalid hash")
+
 // ImgproxyURLSource gets a source URL to a local file for imgproxy.
 func (f *Local) ImgproxyURLSource(hash string) (string, error) {
-	if len(hash) < 2 {
-		return "", errors.New("empty hash")
+	prefixPath, err := f.prefixPath(hash)
+	if err != nil {
+		return "", err
 	}
 
-	return fmt.Sprintf("local:///%s/%s", f.prefixPath(hash), hash), nil
+	return fmt.Sprintf("local:///%s/%s", prefixPath, hash), nil
 }
 
+// Iterate over all files in the store with a batch size of maxBatch.
 func (f *Local) Iterate(maxBatch int, callback func(hashes []string) error) error {
 	hashes := make([]string, 0, maxBatch)
 	err := filepath.Walk(f.assetsPath, func(path string, info os.FileInfo, err error) error {
@@ -191,10 +210,16 @@ func (f *Local) Iterate(maxBatch int, callback func(hashes []string) error) erro
 	return nil
 }
 
+// Remove a file from the store with the given hash.
 func (f *Local) Remove(hash string) error {
-	dirName := fmt.Sprintf("%s/%s", f.assetsPath, f.prefixPath(hash))
+	prefixPath, err := f.prefixPath(hash)
+	if err != nil {
+		return err
+	}
+
+	dirName := fmt.Sprintf("%s/%s", f.assetsPath, prefixPath)
 	fileName := fmt.Sprintf("%s/%s", dirName, hash)
-	err := os.Remove(fileName)
+	err = os.Remove(fileName)
 	if err != nil {
 		return fmt.Errorf("removing file %q: %w", fileName, err)
 	}
@@ -222,8 +247,14 @@ func (f *Local) Remove(hash string) error {
 	return nil
 }
 
+// Size returns the size of the file with the given hash.
 func (f *Local) Size(hash string) (int64, error) {
-	path := fmt.Sprintf("%s/%s/%s", f.assetsPath, f.prefixPath(hash), hash)
+	prefixPath, err := f.prefixPath(hash)
+	if err != nil {
+		return 0, err
+	}
+
+	path := fmt.Sprintf("%s/%s/%s", f.assetsPath, prefixPath, hash)
 	stat, err := os.Stat(path)
 	if err != nil {
 		return 0, err
@@ -232,6 +263,9 @@ func (f *Local) Size(hash string) (int64, error) {
 	return stat.Size(), nil
 }
 
-func (f *Local) prefixPath(hash string) string {
-	return hash[0:f.PrefixSize]
+func (f *Local) prefixPath(hash string) (string, error) {
+	if len(hash) < f.PrefixSize {
+		return "", errInvalidHash
+	}
+	return hash[0:f.PrefixSize], nil
 }
