@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -64,7 +65,7 @@ var (
 // Store stores the content of the reader in a local file.
 // The content is first stored in a temporary file to compute a consistent hash (SHA256)
 // and then the file is renamed to the hash in the assets path.
-func (f *Local) Store(r io.Reader) (hash string, err error) {
+func (f *Local) Store(ctx context.Context, r io.Reader) (hash string, err error) {
 	var (
 		tempFile      *os.File
 		tmpWasRenamed bool
@@ -146,7 +147,7 @@ func (f *Local) Store(r io.Reader) (hash string, err error) {
 
 // Fetch returns a reader to the file with the given hash.
 // If the file does not exist, ErrNotExist is returned.
-func (f *Local) Fetch(hash string) (io.ReadCloser, error) {
+func (f *Local) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return nil, err
@@ -176,7 +177,7 @@ func (f *Local) ImgproxyURLSource(hash string) (string, error) {
 }
 
 // Iterate over all files in the store with a batch size of maxBatch.
-func (f *Local) Iterate(maxBatch int, callback func(hashes []string) error) error {
+func (f *Local) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
 	hashes := make([]string, 0, maxBatch)
 	err := filepath.Walk(f.assetsPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -211,7 +212,7 @@ func (f *Local) Iterate(maxBatch int, callback func(hashes []string) error) erro
 }
 
 // Remove a file from the store with the given hash.
-func (f *Local) Remove(hash string) error {
+func (f *Local) Remove(ctx context.Context, hash string) error {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return err
@@ -248,7 +249,7 @@ func (f *Local) Remove(hash string) error {
 }
 
 // Size returns the size of the file with the given hash.
-func (f *Local) Size(hash string) (int64, error) {
+func (f *Local) Size(ctx context.Context, hash string) (int64, error) {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return 0, err

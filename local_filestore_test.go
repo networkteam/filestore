@@ -1,6 +1,8 @@
 package filestore_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,25 +18,21 @@ import (
 )
 
 func TestLocal_Store(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "test-store")
-	require.NoError(t, err)
+	testDir := t.TempDir()
+	ctx := context.Background()
 
-	t.Cleanup(func() {
-		_ = os.RemoveAll(testDir)
-	})
-
-	fStore, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")
-	hash, err := fStore.Store(r)
+	hash, err := store.Store(ctx, r)
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
 
 	// Can be stored again
 	_, _ = r.Seek(0, io.SeekStart)
-	hash, err = fStore.Store(r)
+	hash, err = store.Store(ctx, r)
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
@@ -46,50 +44,42 @@ func TestLocal_Store(t *testing.T) {
 }
 
 func TestLocal_ImgproxyURLSource(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "test-store")
-	require.NoError(t, err)
+	testDir := t.TempDir()
+	ctx := context.Background()
 
-	t.Cleanup(func() {
-		_ = os.RemoveAll(testDir)
-	})
-
-	fStore, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	// Check existing file
 	r := strings.NewReader("Test content")
-	hash, err := fStore.Store(r)
+	hash, err := store.Store(ctx, r)
 	require.NoError(t, err)
 
 	require.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
 
-	url, err := fStore.ImgproxyURLSource("9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
+	url, err := store.ImgproxyURLSource("9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
 	require.NoError(t, err)
 
 	assert.Equal(t, "local:///9d/9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", url)
 }
 
 func TestLocal_Fetch(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "test-store")
-	require.NoError(t, err)
+	testDir := t.TempDir()
+	ctx := context.Background()
 
-	t.Cleanup(func() {
-		_ = os.RemoveAll(testDir)
-	})
-
-	fStore, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	// Check non-existing file
-	_, err = fStore.Fetch("a09595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
+	_, err = store.Fetch(ctx, "a09595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
 	require.Error(t, err)
 
 	// Check existing file
 	r := strings.NewReader("Test content")
-	hash, err := fStore.Store(r)
+	hash, err := store.Store(ctx, r)
 	require.NoError(t, err)
 
-	entry, err := fStore.Fetch(hash)
+	entry, err := store.Fetch(ctx, hash)
 	require.NoError(t, err)
 
 	defer entry.Close()
@@ -101,22 +91,20 @@ func TestLocal_Fetch(t *testing.T) {
 }
 
 func TestLocal_Iterate(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "test-store")
-	require.NoError(t, err)
+	testDir := t.TempDir()
+	ctx := context.Background()
 
-	t.Cleanup(func() { _ = os.RemoveAll(testDir) })
-
-	fStore, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")
-	hash, err := fStore.Store(r)
+	hash, err := store.Store(ctx, r)
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
 
 	var files []string
-	err = fStore.Iterate(10, func(hashes []string) error {
+	err = store.Iterate(ctx, 10, func(hashes []string) error {
 		files = append(files, hashes...)
 		return nil
 	})
@@ -127,39 +115,45 @@ func TestLocal_Iterate(t *testing.T) {
 	// Store some more files
 	for i := 0; i < 15; i++ {
 		r := strings.NewReader(fmt.Sprintf("Test content %d", i))
-		_, err = fStore.Store(r)
+		_, err = store.Store(ctx, r)
 		require.NoError(t, err)
 	}
 
 	files = files[:0]
-
-	err = fStore.Iterate(5, func(hashes []string) error {
+	calls := 0
+	err = store.Iterate(ctx, 5, func(hashes []string) error {
+		calls++
 		files = append(files, hashes...)
 		return nil
 	})
 	require.NoError(t, err)
 
+	assert.Equal(t, 4, calls)
+
 	assert.Len(t, files, 16)
+
+	// Check that iterate stops when callback returns error
+	myErr := errors.New("my error")
+	err = store.Iterate(ctx, 5, func(hashes []string) error {
+		return myErr
+	})
+	require.ErrorIs(t, err, myErr)
 }
 
 func TestLocal_Remove(t *testing.T) {
-	testDir, err := os.MkdirTemp("", "test-store")
-	require.NoError(t, err)
+	testDir := t.TempDir()
+	ctx := context.Background()
 
-	t.Cleanup(func() {
-		_ = os.RemoveAll(testDir)
-	})
-
-	fStore, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")
-	hash, err := fStore.Store(r)
+	hash, err := store.Store(ctx, r)
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
 
-	err = fStore.Remove(hash)
+	err = store.Remove(ctx, hash)
 	require.NoError(t, err)
 
 	// Check that assets test dir is empty after remove
