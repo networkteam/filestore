@@ -1,4 +1,4 @@
-package filestore_test
+package s3_test
 
 import (
 	"context"
@@ -18,9 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/networkteam/filestore"
+	"github.com/networkteam/filestore/s3"
 )
 
-func TestS3_Store(t *testing.T) {
+func TestS3_Roundtrip(t *testing.T) {
 	ctx := context.Background()
 
 	store := createS3Filestore(t, ctx)
@@ -69,6 +70,27 @@ func TestS3_Store(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{hash}, hashes)
+}
+
+func TestS3_Store(t *testing.T) {
+	ctx := context.Background()
+
+	store := createS3Filestore(t, ctx)
+
+	reader := strings.NewReader("Hello World")
+
+	sizedReader := s3.SizedReader(reader, 11)
+
+	hash, err := store.Store(ctx, sizedReader)
+	require.NoError(t, err)
+
+	expectedHash := "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"
+	assert.Equal(t, expectedHash, hash)
+
+	size, err := store.Size(ctx, hash)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(11), size)
 }
 
 func TestS3_Remove(t *testing.T) {
@@ -143,7 +165,7 @@ func TestS3_Iterate(t *testing.T) {
 	require.ErrorIs(t, err, myErr)
 }
 
-func createS3Filestore(t *testing.T, ctx context.Context) *filestore.S3 {
+func createS3Filestore(t *testing.T, ctx context.Context) *s3.Filestore {
 	t.Helper()
 
 	if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
@@ -154,7 +176,7 @@ func createS3Filestore(t *testing.T, ctx context.Context) *filestore.S3 {
 			t.Fatal("S3_BUCKET is not set")
 		}
 
-		var opts []filestore.S3Option
+		var opts []s3.Option
 
 		accessKey := os.Getenv("S3_ACCESS_KEY")
 		if accessKey == "" {
@@ -164,25 +186,25 @@ func createS3Filestore(t *testing.T, ctx context.Context) *filestore.S3 {
 		if secretKey == "" {
 			t.Fatal("S3_SECRET_KEY is not set")
 		}
-		opts = append(opts, filestore.WithS3CredentialsV4(accessKey, secretKey, ""))
+		opts = append(opts, s3.WithCredentialsV4(accessKey, secretKey, ""))
 
 		if region := os.Getenv("S3_REGION"); region != "" {
-			opts = append(opts, filestore.WithS3Region(region))
+			opts = append(opts, s3.WithRegion(region))
 		}
 
 		if v := os.Getenv("S3_BUCKET_LOOKUP_DNS"); v == "1" || v == "true" {
-			opts = append(opts, filestore.WithS3BucketLookupDNS())
+			opts = append(opts, s3.WithBucketLookupDNS())
 		}
 
 		if v := os.Getenv("S3_BUCKET_LOOKUP_PATH"); v == "1" || v == "true" {
-			opts = append(opts, filestore.WithS3BucketLookupPath())
+			opts = append(opts, s3.WithBucketLookupPath())
 		}
 
 		if secure := os.Getenv("S3_SECURE"); secure == "1" || secure == "true" {
-			opts = append(opts, filestore.WithS3Secure())
+			opts = append(opts, s3.WithSecure())
 		}
 
-		store, err := filestore.NewS3(
+		store, err := s3.NewFilestore(
 			ctx,
 			endpoint,
 			bucketName,
@@ -218,11 +240,11 @@ func createS3Filestore(t *testing.T, ctx context.Context) *filestore.S3 {
 	parsedURL, err := url.Parse(ts.URL)
 	require.NoError(t, err)
 
-	store, err := filestore.NewS3(
+	store, err := s3.NewFilestore(
 		ctx,
 		parsedURL.Host,
 		"assets",
-		filestore.WithS3CredentialsV4("YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", ""),
+		s3.WithCredentialsV4("YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", ""),
 	)
 	require.NoError(t, err)
 

@@ -1,4 +1,4 @@
-package filestore_test
+package local_test
 
 import (
 	"context"
@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/networkteam/filestore"
+	"github.com/networkteam/filestore/local"
 )
 
-func TestLocal_Store(t *testing.T) {
+func TestFilestore_Store(t *testing.T) {
 	testDir := t.TempDir()
 	ctx := context.Background()
 
-	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")
@@ -43,11 +43,11 @@ func TestLocal_Store(t *testing.T) {
 	assert.Equal(t, 0, len(files), "tmp dir should be empty")
 }
 
-func TestLocal_ImgproxyURLSource(t *testing.T) {
+func TestFilestore_ImgproxyURLSource(t *testing.T) {
 	testDir := t.TempDir()
 	ctx := context.Background()
 
-	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	// Check existing file
@@ -63,11 +63,11 @@ func TestLocal_ImgproxyURLSource(t *testing.T) {
 	assert.Equal(t, "local:///9d/9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", url)
 }
 
-func TestLocal_Fetch(t *testing.T) {
+func TestFilestore_Fetch(t *testing.T) {
 	testDir := t.TempDir()
 	ctx := context.Background()
 
-	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	// Check non-existing file
@@ -90,11 +90,11 @@ func TestLocal_Fetch(t *testing.T) {
 	assert.Equal(t, "Test content", string(content))
 }
 
-func TestLocal_Iterate(t *testing.T) {
+func TestFilestore_Iterate(t *testing.T) {
 	testDir := t.TempDir()
 	ctx := context.Background()
 
-	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")
@@ -140,11 +140,11 @@ func TestLocal_Iterate(t *testing.T) {
 	require.ErrorIs(t, err, myErr)
 }
 
-func TestLocal_Remove(t *testing.T) {
+func TestFilestore_Remove(t *testing.T) {
 	testDir := t.TempDir()
 	ctx := context.Background()
 
-	store, err := filestore.NewLocal(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
 	require.NoError(t, err)
 
 	r := strings.NewReader("Test content")

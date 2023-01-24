@@ -1,4 +1,4 @@
-package filestore
+package local
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/go-multierror"
+
+	"github.com/networkteam/filestore"
 )
 
 const (
@@ -20,8 +22,8 @@ const (
 	DefaultTargetFileMode = 0644
 )
 
-// Local is a file store that stores files on a local filesystem.
-type Local struct {
+// Filestore is a file store that stores files on a local filesystem.
+type Filestore struct {
 	tmpPath    string
 	assetsPath string
 
@@ -29,12 +31,12 @@ type Local struct {
 	PrefixSize     int
 }
 
-// NewLocal creates a new file store operating on a (local) filesystem.
+// NewFilestore creates a new file store operating on a (local) filesystem.
 //
 // The assetsPath is the path to a directory where the assets will be stored.
 // The tmpPath is the path to a directory where temporary files will be stored.
 // It should be on the same filesystem as assetsPath to support atomic renames.
-func NewLocal(tmpPath, assetsPath string) (*Local, error) {
+func NewFilestore(tmpPath, assetsPath string) (*Filestore, error) {
 	// Create tmp folder if it does not exist
 	if err := os.MkdirAll(tmpPath, 0755); err != nil {
 		return nil, fmt.Errorf("creating tmp folder: %w", err)
@@ -45,7 +47,7 @@ func NewLocal(tmpPath, assetsPath string) (*Local, error) {
 		return nil, fmt.Errorf("creating assets folder: %w", err)
 	}
 
-	return &Local{
+	return &Filestore{
 		tmpPath:        tmpPath,
 		assetsPath:     assetsPath,
 		TargetFileMode: DefaultTargetFileMode,
@@ -54,18 +56,18 @@ func NewLocal(tmpPath, assetsPath string) (*Local, error) {
 }
 
 var (
-	_ Storer             = &Local{}
-	_ Fetcher            = &Local{}
-	_ Iterator           = &Local{}
-	_ Remover            = &Local{}
-	_ Sizer              = &Local{}
-	_ ImgproxyURLSourcer = &Local{}
+	_ filestore.Storer             = &Filestore{}
+	_ filestore.Fetcher            = &Filestore{}
+	_ filestore.Iterator           = &Filestore{}
+	_ filestore.Remover            = &Filestore{}
+	_ filestore.Sizer              = &Filestore{}
+	_ filestore.ImgproxyURLSourcer = &Filestore{}
 )
 
 // Store stores the content of the reader in a local file.
 // The content is first stored in a temporary file to compute a consistent hash (SHA256)
 // and then the file is renamed to the hash in the assets path.
-func (f *Local) Store(ctx context.Context, r io.Reader) (hash string, err error) {
+func (f *Filestore) Store(ctx context.Context, r io.Reader) (hash string, err error) {
 	var (
 		tempFile      *os.File
 		tmpWasRenamed bool
@@ -147,7 +149,7 @@ func (f *Local) Store(ctx context.Context, r io.Reader) (hash string, err error)
 
 // Fetch returns a reader to the file with the given hash.
 // If the file does not exist, ErrNotExist is returned.
-func (f *Local) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
+func (f *Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return nil, err
@@ -157,7 +159,7 @@ func (f *Local) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrNotExist
+			return nil, filestore.ErrNotExist
 		}
 		return nil, fmt.Errorf("opening file: %w", err)
 	}
@@ -167,7 +169,7 @@ func (f *Local) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 var errInvalidHash = errors.New("invalid hash")
 
 // ImgproxyURLSource gets a source URL to a local file for imgproxy.
-func (f *Local) ImgproxyURLSource(hash string) (string, error) {
+func (f *Filestore) ImgproxyURLSource(hash string) (string, error) {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return "", err
@@ -177,7 +179,7 @@ func (f *Local) ImgproxyURLSource(hash string) (string, error) {
 }
 
 // Iterate over all files in the store with a batch size of maxBatch.
-func (f *Local) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
+func (f *Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
 	hashes := make([]string, 0, maxBatch)
 	err := filepath.Walk(f.assetsPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -212,7 +214,7 @@ func (f *Local) Iterate(ctx context.Context, maxBatch int, callback func(hashes 
 }
 
 // Remove a file from the store with the given hash.
-func (f *Local) Remove(ctx context.Context, hash string) error {
+func (f *Filestore) Remove(ctx context.Context, hash string) error {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return err
@@ -249,7 +251,7 @@ func (f *Local) Remove(ctx context.Context, hash string) error {
 }
 
 // Size returns the size of the file with the given hash.
-func (f *Local) Size(ctx context.Context, hash string) (int64, error) {
+func (f *Filestore) Size(ctx context.Context, hash string) (int64, error) {
 	prefixPath, err := f.prefixPath(hash)
 	if err != nil {
 		return 0, err
@@ -264,7 +266,7 @@ func (f *Local) Size(ctx context.Context, hash string) (int64, error) {
 	return stat.Size(), nil
 }
 
-func (f *Local) prefixPath(hash string) (string, error) {
+func (f *Filestore) prefixPath(hash string) (string, error) {
 	if len(hash) < f.PrefixSize {
 		return "", errInvalidHash
 	}

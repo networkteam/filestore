@@ -1,4 +1,4 @@
-package filestore
+package s3
 
 import (
 	"context"
@@ -11,46 +11,27 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/networkteam/filestore"
 )
 
-// S3 is a file store that stores files in a S3 compatible object storage (e.g. AWS S3 or MinIO).
-type S3 struct {
+// Filestore is a file store that stores files in a S3 compatible object storage (e.g. AWS S3 or MinIO).
+type Filestore struct {
 	Client     *minio.Client
 	URL        string
 	BucketName string
 }
 
-// SizedReader is a reader that also returns the size of the data.
-type SizedReader interface {
-	io.Reader
-	// Size of the data that can be read.
-	Size() int64
-}
-
-// ContentTypeReader is a reader that also returns the content type of the data.
-type ContentTypeReader interface {
-	io.Reader
-	// ContentType (media type) of the data.
-	ContentType() string
-}
-
-// ContentDispositionReader is a reader that also returns the content disposition of the data.
-type ContentDispositionReader interface {
-	io.Reader
-	// ContentDisposition of the data (e.g. "inline; filename=\"test.png\"").
-	ContentDisposition() string
-}
-
 var (
-	_ Storer             = &S3{}
-	_ Fetcher            = &S3{}
-	_ Iterator           = &S3{}
-	_ Remover            = &S3{}
-	_ Sizer              = &S3{}
-	_ ImgproxyURLSourcer = &S3{}
+	_ filestore.Storer             = &Filestore{}
+	_ filestore.Fetcher            = &Filestore{}
+	_ filestore.Iterator           = &Filestore{}
+	_ filestore.Remover            = &Filestore{}
+	_ filestore.Sizer              = &Filestore{}
+	_ filestore.ImgproxyURLSourcer = &Filestore{}
 )
 
-type s3Options struct {
+type options struct {
 	credentials     *credentials.Credentials
 	secure          bool
 	region          string
@@ -59,73 +40,73 @@ type s3Options struct {
 	transport       http.RoundTripper
 }
 
-// S3Option is a functional option for creating a S3 file store.
-type S3Option func(*s3Options)
+// Option is a functional option for creating a S3 file store.
+type Option func(*options)
 
-// WithS3Secure sets the secure flag for the S3 client (i.e. use HTTPS for the endpoint).
-func WithS3Secure() S3Option {
-	return func(opts *s3Options) {
+// WithSecure sets the secure flag for the S3 client (i.e. use HTTPS for the endpoint).
+func WithSecure() Option {
+	return func(opts *options) {
 		opts.secure = true
 	}
 }
 
-// WithS3CredentialsV2 sets the credentials for the S3 client using V2 signatures.
+// WithCredentialsV2 sets the credentials for the S3 client using V2 signatures.
 // The token can be left empty.
-func WithS3CredentialsV2(accessKey, secretKey, token string) S3Option {
-	return func(opts *s3Options) {
+func WithCredentialsV2(accessKey, secretKey, token string) Option {
+	return func(opts *options) {
 		opts.credentials = credentials.NewStaticV2(accessKey, secretKey, token)
 	}
 }
 
-// WithS3CredentialsV4 sets the credentials for the S3 client using V4 signatures.
+// WithCredentialsV4 sets the credentials for the S3 client using V4 signatures.
 // The V4 signature should be used with MinIO.
 // The token can be left empty.
-func WithS3CredentialsV4(accessKey, secretKey, token string) S3Option {
-	return func(opts *s3Options) {
+func WithCredentialsV4(accessKey, secretKey, token string) Option {
+	return func(opts *options) {
 		opts.credentials = credentials.NewStaticV4(accessKey, secretKey, token)
 	}
 }
 
-// WithS3Region sets the region for the S3 client.
+// WithRegion sets the region for the S3 client.
 // The region can be left empty for MinIO.
-func WithS3Region(region string) S3Option {
-	return func(opts *s3Options) {
+func WithRegion(region string) Option {
+	return func(opts *options) {
 		opts.region = region
 	}
 }
 
-// WithS3BucketLookupPath sets the bucket lookup to path style.
+// WithBucketLookupPath sets the bucket lookup to path style.
 // If not set, the bucket lookup is set to auto.
-func WithS3BucketLookupPath() S3Option {
-	return func(opts *s3Options) {
+func WithBucketLookupPath() Option {
+	return func(opts *options) {
 		opts.bucketLookup = minio.BucketLookupPath
 	}
 }
 
-// WithS3BucketLookupDNS sets the bucket lookup to DNS style.
-func WithS3BucketLookupDNS() S3Option {
-	return func(opts *s3Options) {
+// WithBucketLookupDNS sets the bucket lookup to DNS style.
+func WithBucketLookupDNS() Option {
+	return func(opts *options) {
 		opts.bucketLookup = minio.BucketLookupDNS
 	}
 }
 
-// WithS3TrailingHeaders sets the trailing headers flag for the S3 client.
-func WithS3TrailingHeaders() S3Option {
-	return func(opts *s3Options) {
+// WithTrailingHeaders sets the trailing headers flag for the S3 client.
+func WithTrailingHeaders() Option {
+	return func(opts *options) {
 		opts.trailingHeaders = true
 	}
 }
 
-// WithS3Transport sets a custom HTTP transport for testing or special needs.
-func WithS3Transport(transport http.RoundTripper) S3Option {
-	return func(opts *s3Options) {
+// WithTransport sets a custom HTTP transport for testing or special needs.
+func WithTransport(transport http.RoundTripper) Option {
+	return func(opts *options) {
 		opts.transport = transport
 	}
 }
 
-// NewS3 creates a new S3 file store.
-func NewS3(ctx context.Context, endpoint, bucketName string, opts ...S3Option) (*S3, error) {
-	s3Options := &s3Options{}
+// NewFilestore creates a new S3 file store.
+func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Option) (*Filestore, error) {
+	s3Options := &options{}
 	for _, opt := range opts {
 		opt(s3Options)
 	}
@@ -155,7 +136,7 @@ func NewS3(ctx context.Context, endpoint, bucketName string, opts ...S3Option) (
 		}
 	}
 
-	return &S3{
+	return &Filestore{
 		Client:     client,
 		URL:        endpoint,
 		BucketName: bucketName,
@@ -164,7 +145,7 @@ func NewS3(ctx context.Context, endpoint, bucketName string, opts ...S3Option) (
 
 // Fetch gets an object from the S3 bucket by hash and returns a reader for the object.
 // It will stat the object to check for existence. If the object does not exist, it will return ErrNotExist.
-func (s S3) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
+func (s Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	readCloser, err := s.Client.GetObject(ctx, s.BucketName, hash, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("getting object %q: %w", hash, err)
@@ -174,7 +155,7 @@ func (s S3) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	_, err = readCloser.Stat()
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
-			return nil, ErrNotExist
+			return nil, filestore.ErrNotExist
 		}
 		return nil, fmt.Errorf("getting object info %q: %w", hash, err)
 	}
@@ -184,13 +165,13 @@ func (s S3) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 
 // ImgproxyURLSource implements the ImgproxyURLSourcer interface.
 // It returns a URL to the object that will be understood by imgproxy in the form of "s3://bucket-name/object-key".
-func (s S3) ImgproxyURLSource(hash string) (string, error) {
+func (s Filestore) ImgproxyURLSource(hash string) (string, error) {
 	return fmt.Sprintf("s3://%s/%s", s.BucketName, hash), nil
 }
 
 // Iterate iterates over all objects in the S3 bucket and calls the callback with a maxBatch amount of hashes.
 // Iteration will stop if the callback returns an error.
-func (s S3) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
+func (s Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
 	objInfos := s.Client.ListObjects(ctx, s.BucketName, minio.ListObjectsOptions{})
 
 	hashes := make([]string, 0, maxBatch)
@@ -217,7 +198,7 @@ func (s S3) Iterate(ctx context.Context, maxBatch int, callback func(hashes []st
 }
 
 // Remove removes an object from the S3 bucket by hash.
-func (s S3) Remove(ctx context.Context, hash string) error {
+func (s Filestore) Remove(ctx context.Context, hash string) error {
 	err := s.Client.RemoveObject(ctx, s.BucketName, hash, minio.RemoveObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("removing object %q: %w", hash, err)
@@ -226,7 +207,7 @@ func (s S3) Remove(ctx context.Context, hash string) error {
 }
 
 // Size returns the size of an object in the S3 bucket by hash.
-func (s S3) Size(ctx context.Context, hash string) (int64, error) {
+func (s Filestore) Size(ctx context.Context, hash string) (int64, error) {
 	object, err := s.Client.GetObject(ctx, s.BucketName, hash, minio.GetObjectOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("getting object %q: %w", hash, err)
@@ -241,19 +222,19 @@ func (s S3) Size(ctx context.Context, hash string) (int64, error) {
 }
 
 // Store stores an object in the S3 bucket by hash.
-// The reader should implement SizedReader for better performance (the client can optimize the operation given the size and reduce memory usage).
-// The reader can implement ContentTypeReader or ContentDispositionReader to set the content type or content disposition of the object.
-func (s S3) Store(ctx context.Context, r io.Reader) (string, error) {
+// The reader should implement Sized for better performance (the client can optimize the operation given the size and reduce memory usage).
+// The reader can implement ContentTyped or ContentDispositioned to set the content type or content disposition of the object.
+func (s Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
 	var size int64 = -1
-	if sizedReader, ok := r.(SizedReader); ok {
+	if sizedReader, ok := r.(Sized); ok {
 		size = sizedReader.Size()
 	}
 
 	var contentType, contentDisposition string
-	if typedReader, ok := r.(ContentTypeReader); ok {
+	if typedReader, ok := r.(ContentTyped); ok {
 		contentType = typedReader.ContentType()
 	}
-	if dispoReader, ok := r.(ContentDispositionReader); ok {
+	if dispoReader, ok := r.(ContentDispositioned); ok {
 		contentDisposition = dispoReader.ContentDisposition()
 	}
 
@@ -295,3 +276,69 @@ func (s S3) Store(ctx context.Context, r io.Reader) (string, error) {
 
 	return hashHex, nil
 }
+
+// Sized is a reader that can return the size of the data.
+type Sized interface {
+	// Size of the data that can be read.
+	Size() int64
+}
+
+// ContentTyped is a reader that also returns the content type of the data.
+type ContentTyped interface {
+	// ContentType (media type) of the data.
+	ContentType() string
+}
+
+// ContentDispositioned is a reader that also returns the content disposition of the data.
+type ContentDispositioned interface {
+	// ContentDisposition of the data (e.g. "inline; filename=\"test.png\"").
+	ContentDisposition() string
+}
+
+// SizedReader wraps a reader and its size of the data to implement Sized.
+func SizedReader(r io.Reader, size int64) io.Reader {
+	return &sizedReader{r, size}
+}
+
+type sizedReader struct {
+	io.Reader
+	size int64
+}
+
+func (s *sizedReader) Size() int64 {
+	return s.size
+}
+
+var _ Sized = &sizedReader{}
+
+// ContentTypedReader wraps a reader and its content type to implement ContentTyped.
+func ContentTypedReader(r io.Reader, contentType string) io.Reader {
+	return &contentTypedReader{r, contentType}
+}
+
+type contentTypedReader struct {
+	io.Reader
+	contentType string
+}
+
+func (s *contentTypedReader) ContentType() string {
+	return s.contentType
+}
+
+var _ ContentTyped = &contentTypedReader{}
+
+// ContentDispositionedReader wraps a reader and its content disposition to implement ContentDispositioned.
+func ContentDispositionedReader(r io.Reader, contentDisposition string) io.Reader {
+	return &contentDispositionedReader{r, contentDisposition}
+}
+
+type contentDispositionedReader struct {
+	io.Reader
+	contentDisposition string
+}
+
+func (s *contentDispositionedReader) ContentDisposition() string {
+	return s.contentDisposition
+}
+
+var _ ContentDispositioned = &contentDispositionedReader{}

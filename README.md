@@ -6,13 +6,17 @@
 
 ## Features
 
-* Local file storage (in a directory with subdirectories derived from hash prefix)
-* Identify uploaded files as hashes (e.g. in a database)
+* Identify uploaded files as hashes (e.g. for reference in a database)
+* Implementations
+  * Local file storage (in a directory with subdirectories derived from hash prefix)
+  * S3 based file storage (tested with MinIO and AWS S3)
 
 ## Scope
 
-Store uploaded files locally or in an object store (S3) with a consistent interface.
-Add capabilities for image processing with e.g. imgproxy.
+An abstracted file storage in webapps is the main use case.
+It is well suited to handle file uploads, retrieval and deletion.
+With the integration of image processing like [imgproxy](https://imgproxy.net/) it provides a simple and efficient way to handle files and images in webapps.
+When storing files in S3 a webapp can be run stateless which simplifies container deployments. 
 
 ## Install
 
@@ -34,13 +38,13 @@ import (
 	"log"
 	"strings"
 
-	"github.com/networkteam/filestore"
+	"github.com/networkteam/filestore/local"
 )
 
 func main() {
 	ctx := context.Background()
 
-	fStore, err := filestore.NewLocal("./tmp", "./assets")
+	fStore, err := local.NewFilestore("./tmp", "./assets")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,48 +76,55 @@ func main() {
 package main
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"log"
-	"strings"
+  "context"
+  "fmt"
+  "io"
+  "log"
+  "strings"
 
-	"github.com/networkteam/filestore"
+  "github.com/networkteam/filestore/s3"
 )
 
 func main() {
-	ctx := context.Background()
+  ctx := context.Background()
 
-	fStore, err := filestore.NewS3(
-		ctx,
-		"s3.eu-central-1.amazonaws.com",
-		"my-bucket",
-		filestore.WithS3CredentialsV4("my-access-key", "********", ""),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
+  fStore, err := s3.NewFilestore(
+    ctx,
+    "s3.eu-central-1.amazonaws.com",
+    "my-bucket",
+    s3.WithCredentialsV4("my-access-key", "********", ""),
+  )
+  if err != nil {
+    log.Fatal(err)
+  }
 
-	// Storing
-	hash, err := fStore.Store(ctx, strings.NewReader("Hello World"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(hash)
+  // Storing
+  text := "Hello World"
+  sr := strings.NewReader(text)
+  // Wrap reader with s3.SizedReader to set content length in advance
+  hash, err := fStore.Store(ctx, s3.SizedReader(sr, int64(len(text))))
+  if err != nil {
+    log.Fatal(err)
+  }
+  fmt.Println(hash)
 
-	// Fetching
-	r, err := fStore.Fetch(ctx, hash)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer r.Close()
-	content, err := io.ReadAll(r)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(content))
+  // Fetching
+  r, err := fStore.Fetch(ctx, hash)
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer r.Close()
+  content, err := io.ReadAll(r)
+  if err != nil {
+    log.Fatal(err)
+  }
+  fmt.Println(string(content))
 }
 ```
+
+## Dependencies
+
+The filestore module provides each implementation in its own package to reduce the amount of transitive dependencies (e.g. you don't need a S3 client if not using `s3.Filestore`).
 
 ## Development
 
