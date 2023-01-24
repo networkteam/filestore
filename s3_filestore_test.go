@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -20,11 +21,9 @@ import (
 )
 
 func TestS3_Store(t *testing.T) {
-	bucketName := "assets"
-
 	ctx := context.Background()
 
-	store := createS3Filestore(t, ctx, bucketName)
+	store := createS3Filestore(t, ctx)
 
 	reader := strings.NewReader("Hello World")
 	expectedHash := "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e"
@@ -41,6 +40,11 @@ func TestS3_Store(t *testing.T) {
 
 	imgproxyURLSource, err := store.ImgproxyURLSource(hash)
 	require.NoError(t, err)
+
+	bucketName := "assets"
+	if v := os.Getenv("S3_BUCKET"); v != "" {
+		bucketName = v
+	}
 
 	assert.Equal(t, "s3://"+bucketName+"/"+expectedHash, imgproxyURLSource)
 
@@ -68,11 +72,8 @@ func TestS3_Store(t *testing.T) {
 }
 
 func TestS3_Remove(t *testing.T) {
-	bucketName := "assets"
-
 	ctx := context.Background()
-
-	store := createS3Filestore(t, ctx, bucketName)
+	store := createS3Filestore(t, ctx)
 
 	reader := strings.NewReader("Hello World")
 
@@ -87,11 +88,9 @@ func TestS3_Remove(t *testing.T) {
 }
 
 func TestS3_Iterate(t *testing.T) {
-	bucketName := "assets"
-
 	ctx := context.Background()
 
-	store := createS3Filestore(t, ctx, bucketName)
+	store := createS3Filestore(t, ctx)
 
 	for i := 0; i < 21; i++ {
 		reader := strings.NewReader(fmt.Sprintf("Hello World %d", i))
@@ -144,7 +143,70 @@ func TestS3_Iterate(t *testing.T) {
 	require.ErrorIs(t, err, myErr)
 }
 
-func createS3Filestore(t *testing.T, ctx context.Context, bucketName string) *filestore.S3 {
+func createS3Filestore(t *testing.T, ctx context.Context) *filestore.S3 {
+	t.Helper()
+
+	if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
+		t.Logf("Using S3 endpoint %s for test", endpoint)
+
+		bucketName := os.Getenv("S3_BUCKET")
+		if bucketName == "" {
+			t.Fatal("S3_BUCKET is not set")
+		}
+
+		var opts []filestore.S3Option
+
+		accessKey := os.Getenv("S3_ACCESS_KEY")
+		if accessKey == "" {
+			t.Fatal("S3_ACCESS_KEY is not set")
+		}
+		secretKey := os.Getenv("S3_SECRET_KEY")
+		if secretKey == "" {
+			t.Fatal("S3_SECRET_KEY is not set")
+		}
+		opts = append(opts, filestore.WithS3CredentialsV4(accessKey, secretKey, ""))
+
+		if region := os.Getenv("S3_REGION"); region != "" {
+			opts = append(opts, filestore.WithS3Region(region))
+		}
+
+		if v := os.Getenv("S3_BUCKET_LOOKUP_DNS"); v == "1" || v == "true" {
+			opts = append(opts, filestore.WithS3BucketLookupDNS())
+		}
+
+		if v := os.Getenv("S3_BUCKET_LOOKUP_PATH"); v == "1" || v == "true" {
+			opts = append(opts, filestore.WithS3BucketLookupPath())
+		}
+
+		if secure := os.Getenv("S3_SECURE"); secure == "1" || secure == "true" {
+			opts = append(opts, filestore.WithS3Secure())
+		}
+
+		store, err := filestore.NewS3(
+			ctx,
+			endpoint,
+			bucketName,
+			opts...,
+		)
+		require.NoError(t, err)
+
+		t.Cleanup(func() {
+			// Remove all objects from the bucket
+			err := store.Iterate(ctx, 50, func(hashes []string) error {
+				for _, hash := range hashes {
+					err := store.Remove(ctx, hash)
+					require.NoError(t, err)
+				}
+				return nil
+			})
+			require.NoError(t, err)
+		})
+
+		return store
+	}
+
+	t.Log("Using in-memory fake S3 server for test (no S3_ENDPOINT env var set)")
+
 	backend := s3mem.New()
 	faker := gofakes3.New(backend)
 	ts := httptest.NewServer(faker.Server())
@@ -159,7 +221,7 @@ func createS3Filestore(t *testing.T, ctx context.Context, bucketName string) *fi
 	store, err := filestore.NewS3(
 		ctx,
 		parsedURL.Host,
-		bucketName,
+		"assets",
 		filestore.WithS3CredentialsV4("YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", ""),
 	)
 	require.NoError(t, err)

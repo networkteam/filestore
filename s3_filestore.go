@@ -271,7 +271,7 @@ func (s S3) Store(ctx context.Context, r io.Reader) (string, error) {
 		ContentDisposition: contentDisposition,
 	})
 	if err != nil {
-		return "", fmt.Errorf("putting temp object: %w", err)
+		return "", fmt.Errorf("putting temp object %q: %w", tmpObjectName, err)
 	}
 
 	hashBytes := digest.Sum(nil)
@@ -285,7 +285,7 @@ func (s S3) Store(ctx context.Context, r io.Reader) (string, error) {
 		Object: tmpObjectName,
 	})
 	if err != nil {
-		return "", fmt.Errorf("copying temp object: %w", err)
+		return "", fmt.Errorf("copying temp object %q: %w", tmpObjectName, err)
 	}
 
 	err = s.Client.RemoveObject(ctx, s.BucketName, tmpObjectName, minio.RemoveObjectOptions{})
