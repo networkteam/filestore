@@ -10,6 +10,7 @@
 * Implementations
   * Local file storage (in a directory with subdirectories derived from hash prefix)
   * S3 based file storage (tested with MinIO and AWS S3)
+  * Memory based file storage (for testing)
 
 ## Scope
 

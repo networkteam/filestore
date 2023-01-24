@@ -198,6 +198,7 @@ func (s Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hash
 }
 
 // Remove removes an object from the S3 bucket by hash.
+// It is not guaranteed to error if the hash does not exist.
 func (s Filestore) Remove(ctx context.Context, hash string) error {
 	err := s.Client.RemoveObject(ctx, s.BucketName, hash, minio.RemoveObjectOptions{})
 	if err != nil {

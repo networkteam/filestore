@@ -1,12 +1,10 @@
-package local_test
+package memory_test
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path"
 	"strings"
 	"testing"
 
@@ -14,15 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/networkteam/filestore"
-	"github.com/networkteam/filestore/local"
+	"github.com/networkteam/filestore/memory"
 )
 
 func TestFilestore_Store(t *testing.T) {
-	testDir := t.TempDir()
 	ctx := context.Background()
-
-	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
-	require.NoError(t, err)
+	store := memory.NewFilestore()
 
 	r := strings.NewReader("Test content")
 	hash, err := store.Store(ctx, r)
@@ -36,19 +31,11 @@ func TestFilestore_Store(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
-
-	// Check that tmp test dir is empty after store
-	files, err := os.ReadDir(path.Join(testDir, "tmp"))
-	require.NoError(t, err)
-	assert.Equal(t, 0, len(files), "tmp dir should be empty")
 }
 
 func TestFilestore_ImgproxyURLSource(t *testing.T) {
-	testDir := t.TempDir()
 	ctx := context.Background()
-
-	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
-	require.NoError(t, err)
+	store := memory.NewFilestore()
 
 	// Check existing file
 	r := strings.NewReader("Test content")
@@ -60,18 +47,15 @@ func TestFilestore_ImgproxyURLSource(t *testing.T) {
 	url, err := store.ImgproxyURLSource("9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
 	require.NoError(t, err)
 
-	assert.Equal(t, "local:///9d/9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", url)
+	assert.Equal(t, "memory://9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", url)
 }
 
 func TestFilestore_Fetch(t *testing.T) {
-	testDir := t.TempDir()
 	ctx := context.Background()
-
-	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
-	require.NoError(t, err)
+	store := memory.NewFilestore()
 
 	// Check non-existing file
-	_, err = store.Fetch(ctx, "a09595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
+	_, err := store.Fetch(ctx, "a09595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
 	require.Error(t, err)
 
 	// Check existing file
@@ -91,11 +75,8 @@ func TestFilestore_Fetch(t *testing.T) {
 }
 
 func TestFilestore_Iterate(t *testing.T) {
-	testDir := t.TempDir()
 	ctx := context.Background()
-
-	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
-	require.NoError(t, err)
+	store := memory.NewFilestore()
 
 	r := strings.NewReader("Test content")
 	hash, err := store.Store(ctx, r)
@@ -141,11 +122,8 @@ func TestFilestore_Iterate(t *testing.T) {
 }
 
 func TestFilestore_Remove(t *testing.T) {
-	testDir := t.TempDir()
 	ctx := context.Background()
-
-	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
-	require.NoError(t, err)
+	store := memory.NewFilestore()
 
 	r := strings.NewReader("Test content")
 	hash, err := store.Store(ctx, r)
@@ -158,9 +136,4 @@ func TestFilestore_Remove(t *testing.T) {
 
 	err = store.Remove(ctx, "a09595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87")
 	require.ErrorIs(t, err, filestore.ErrNotExist)
-
-	// Check that assets test dir is empty after remove
-	files, err := os.ReadDir(path.Join(testDir, "assets"))
-	require.NoError(t, err)
-	assert.Empty(t, files, "assets dir should be empty")
 }

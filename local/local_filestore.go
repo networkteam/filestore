@@ -224,6 +224,9 @@ func (f *Filestore) Remove(ctx context.Context, hash string) error {
 	fileName := fmt.Sprintf("%s/%s", dirName, hash)
 	err = os.Remove(fileName)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return filestore.ErrNotExist
+		}
 		return fmt.Errorf("removing file %q: %w", fileName, err)
 	}
 
