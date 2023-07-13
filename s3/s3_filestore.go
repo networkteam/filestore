@@ -105,7 +105,7 @@ func WithTransport(transport http.RoundTripper) Option {
 }
 
 // NewFilestore creates a new S3 file store.
-func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Option) (*Filestore, error) {
+func NewFilestore(ctx context.Context, endpoint, bucketName string, autoCreateBucket bool, opts ...Option) (*Filestore, error) {
 	s3Options := &options{}
 	for _, opt := range opts {
 		opt(s3Options)
@@ -126,7 +126,14 @@ func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Opti
 
 	bucketExists, err := client.BucketExists(ctx, bucketName)
 	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchBucket" {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("checking if bucket %q exists: %w", bucketName, err)
+	}
+
+	if !bucketExists && !autoCreateBucket {
+		return nil, nil
 	}
 
 	if !bucketExists {
