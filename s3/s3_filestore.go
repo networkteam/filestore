@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/gofrs/uuid"
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/networkteam/filestore"
 )
@@ -22,87 +20,7 @@ type Filestore struct {
 	BucketName string
 }
 
-var (
-	_ filestore.Storer             = &Filestore{}
-	_ filestore.Fetcher            = &Filestore{}
-	_ filestore.Iterator           = &Filestore{}
-	_ filestore.Remover            = &Filestore{}
-	_ filestore.Sizer              = &Filestore{}
-	_ filestore.ImgproxyURLSourcer = &Filestore{}
-)
-
-type options struct {
-	credentials     *credentials.Credentials
-	secure          bool
-	region          string
-	bucketLookup    minio.BucketLookupType
-	trailingHeaders bool
-	transport       http.RoundTripper
-}
-
-// Option is a functional option for creating a S3 file store.
-type Option func(*options)
-
-// WithSecure sets the secure flag for the S3 client (i.e. use HTTPS for the endpoint).
-func WithSecure() Option {
-	return func(opts *options) {
-		opts.secure = true
-	}
-}
-
-// WithCredentialsV2 sets the credentials for the S3 client using V2 signatures.
-// The token can be left empty.
-func WithCredentialsV2(accessKey, secretKey, token string) Option {
-	return func(opts *options) {
-		opts.credentials = credentials.NewStaticV2(accessKey, secretKey, token)
-	}
-}
-
-// WithCredentialsV4 sets the credentials for the S3 client using V4 signatures.
-// The V4 signature should be used with MinIO.
-// The token can be left empty.
-func WithCredentialsV4(accessKey, secretKey, token string) Option {
-	return func(opts *options) {
-		opts.credentials = credentials.NewStaticV4(accessKey, secretKey, token)
-	}
-}
-
-// WithRegion sets the region for the S3 client.
-// The region can be left empty for MinIO.
-func WithRegion(region string) Option {
-	return func(opts *options) {
-		opts.region = region
-	}
-}
-
-// WithBucketLookupPath sets the bucket lookup to path style.
-// If not set, the bucket lookup is set to auto.
-func WithBucketLookupPath() Option {
-	return func(opts *options) {
-		opts.bucketLookup = minio.BucketLookupPath
-	}
-}
-
-// WithBucketLookupDNS sets the bucket lookup to DNS style.
-func WithBucketLookupDNS() Option {
-	return func(opts *options) {
-		opts.bucketLookup = minio.BucketLookupDNS
-	}
-}
-
-// WithTrailingHeaders sets the trailing headers flag for the S3 client.
-func WithTrailingHeaders() Option {
-	return func(opts *options) {
-		opts.trailingHeaders = true
-	}
-}
-
-// WithTransport sets a custom HTTP transport for testing or special needs.
-func WithTransport(transport http.RoundTripper) Option {
-	return func(opts *options) {
-		opts.transport = transport
-	}
-}
+var _ filestore.FileStore = &Filestore{}
 
 // NewFilestore creates a new S3 file store.
 func NewFilestore(ctx context.Context, endpoint, bucketName string, autoCreateBucket bool, opts ...Option) (*Filestore, error) {
@@ -284,69 +202,3 @@ func (s Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
 
 	return hashHex, nil
 }
-
-// Sized is a reader that can return the size of the data.
-type Sized interface {
-	// Size of the data that can be read.
-	Size() int64
-}
-
-// ContentTyped is a reader that also returns the content type of the data.
-type ContentTyped interface {
-	// ContentType (media type) of the data.
-	ContentType() string
-}
-
-// ContentDispositioned is a reader that also returns the content disposition of the data.
-type ContentDispositioned interface {
-	// ContentDisposition of the data (e.g. "inline; filename=\"test.png\"").
-	ContentDisposition() string
-}
-
-// SizedReader wraps a reader and its size of the data to implement Sized.
-func SizedReader(r io.Reader, size int64) io.Reader {
-	return &sizedReader{r, size}
-}
-
-type sizedReader struct {
-	io.Reader
-	size int64
-}
-
-func (s *sizedReader) Size() int64 {
-	return s.size
-}
-
-var _ Sized = &sizedReader{}
-
-// ContentTypedReader wraps a reader and its content type to implement ContentTyped.
-func ContentTypedReader(r io.Reader, contentType string) io.Reader {
-	return &contentTypedReader{r, contentType}
-}
-
-type contentTypedReader struct {
-	io.Reader
-	contentType string
-}
-
-func (s *contentTypedReader) ContentType() string {
-	return s.contentType
-}
-
-var _ ContentTyped = &contentTypedReader{}
-
-// ContentDispositionedReader wraps a reader and its content disposition to implement ContentDispositioned.
-func ContentDispositionedReader(r io.Reader, contentDisposition string) io.Reader {
-	return &contentDispositionedReader{r, contentDisposition}
-}
-
-type contentDispositionedReader struct {
-	io.Reader
-	contentDisposition string
-}
-
-func (s *contentDispositionedReader) ContentDisposition() string {
-	return s.contentDisposition
-}
-
-var _ ContentDispositioned = &contentDispositionedReader{}

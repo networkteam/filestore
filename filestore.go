@@ -39,5 +39,15 @@ type ImgproxyURLSourcer interface {
 	ImgproxyURLSource(hash string) (string, error)
 }
 
+// A FileStore bundles all the interfaces above.
+type FileStore interface {
+	Storer
+	Fetcher
+	Iterator
+	Remover
+	Sizer
+	ImgproxyURLSourcer
+}
+
 // ErrNotExist is returned when a stored file does not exist.
 var ErrNotExist = errors.New("file does not exist")

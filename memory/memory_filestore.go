@@ -17,6 +17,15 @@ type Filestore struct {
 	files map[string][]byte
 }
 
+var _ filestore.FileStore = &Filestore{}
+
+// NewFilestore creates a new in-memory file store.
+func NewFilestore() *Filestore {
+	return &Filestore{
+		files: make(map[string][]byte),
+	}
+}
+
 // Store implements filestore.Storer.
 func (f *Filestore) Store(ctx context.Context, r io.Reader) (hash string, err error) {
 	f.mx.Lock()
@@ -101,20 +110,4 @@ func (f *Filestore) Size(ctx context.Context, hash string) (int64, error) {
 // ImgproxyURLSource returns a dummy URL to the hash in memory. It should only be used for testing purposes.
 func (f *Filestore) ImgproxyURLSource(hash string) (string, error) {
 	return "memory://" + hash, nil
-}
-
-var (
-	_ filestore.Storer             = &Filestore{}
-	_ filestore.Fetcher            = &Filestore{}
-	_ filestore.Iterator           = &Filestore{}
-	_ filestore.Remover            = &Filestore{}
-	_ filestore.Sizer              = &Filestore{}
-	_ filestore.ImgproxyURLSourcer = &Filestore{}
-)
-
-// NewFilestore creates a new in-memory file store.
-func NewFilestore() *Filestore {
-	return &Filestore{
-		files: make(map[string][]byte),
-	}
 }
