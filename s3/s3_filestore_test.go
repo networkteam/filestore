@@ -204,6 +204,10 @@ func createS3Filestore(t *testing.T, ctx context.Context) *s3.Filestore {
 			opts = append(opts, s3.WithSecure())
 		}
 
+		if _, ok := os.LookupEnv("S3_BUCKET_AUTO_CREATE"); ok {
+			opts = append(opts, s3.WithBucketAutoCreate())
+		}
+
 		store, err := s3.NewFilestore(
 			ctx,
 			endpoint,
@@ -245,6 +249,7 @@ func createS3Filestore(t *testing.T, ctx context.Context) *s3.Filestore {
 		parsedURL.Host,
 		"assets",
 		s3.WithCredentialsV4("YOUR-ACCESSKEYID", "YOUR-SECRETACCESSKEY", ""),
+		s3.WithBucketAutoCreate(),
 	)
 	require.NoError(t, err)
 

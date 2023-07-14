@@ -31,6 +31,8 @@ type Filestore struct {
 	PrefixSize     int
 }
 
+var _ filestore.FileStore = &Filestore{}
+
 // NewFilestore creates a new file store operating on a (local) filesystem.
 //
 // The assetsPath is the path to a directory where the assets will be stored.
@@ -54,15 +56,6 @@ func NewFilestore(tmpPath, assetsPath string) (*Filestore, error) {
 		PrefixSize:     DefaultPrefixSize,
 	}, nil
 }
-
-var (
-	_ filestore.Storer             = &Filestore{}
-	_ filestore.Fetcher            = &Filestore{}
-	_ filestore.Iterator           = &Filestore{}
-	_ filestore.Remover            = &Filestore{}
-	_ filestore.Sizer              = &Filestore{}
-	_ filestore.ImgproxyURLSourcer = &Filestore{}
-)
 
 // Store stores the content of the reader in a local file.
 // The content is first stored in a temporary file to compute a consistent hash (SHA256)
