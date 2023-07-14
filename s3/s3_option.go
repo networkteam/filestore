@@ -8,12 +8,13 @@ import (
 )
 
 type options struct {
-	credentials     *credentials.Credentials
-	secure          bool
-	region          string
-	bucketLookup    minio.BucketLookupType
-	trailingHeaders bool
-	transport       http.RoundTripper
+	credentials      *credentials.Credentials
+	secure           bool
+	region           string
+	bucketLookup     minio.BucketLookupType
+	trailingHeaders  bool
+	transport        http.RoundTripper
+	bucketAutoCreate bool
 }
 
 // Option is a functional option for creating a S3 file store.
@@ -77,5 +78,12 @@ func WithTrailingHeaders() Option {
 func WithTransport(transport http.RoundTripper) Option {
 	return func(opts *options) {
 		opts.transport = transport
+	}
+}
+
+// WithBucketAutoCreate sets the automatic creation of the bucket if it doesn't exist yet.
+func WithBucketAutoCreate() Option {
+	return func(opts *options) {
+		opts.bucketAutoCreate = true
 	}
 }

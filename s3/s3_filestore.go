@@ -23,7 +23,7 @@ type Filestore struct {
 var _ filestore.FileStore = &Filestore{}
 
 // NewFilestore creates a new S3 file store.
-func NewFilestore(ctx context.Context, endpoint, bucketName string, autoCreateBucket bool, opts ...Option) (*Filestore, error) {
+func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Option) (*Filestore, error) {
 	s3Options := &options{}
 	for _, opt := range opts {
 		opt(s3Options)
@@ -50,7 +50,7 @@ func NewFilestore(ctx context.Context, endpoint, bucketName string, autoCreateBu
 		return nil, fmt.Errorf("checking if bucket %q exists: %w", bucketName, err)
 	}
 
-	if !bucketExists && !autoCreateBucket {
+	if !bucketExists && !s3Options.bucketAutoCreate {
 		return nil, nil
 	}
 
