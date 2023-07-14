@@ -35,23 +35,25 @@ func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Opti
 		Region:          s3Options.region,
 		BucketLookup:    s3Options.bucketLookup,
 		TrailingHeaders: s3Options.trailingHeaders,
-
-		Transport: s3Options.transport,
+		Transport:       s3Options.transport,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating MinIO client: %w", err)
 	}
 
-	bucketExists, err := client.BucketExists(ctx, bucketName)
-	if err != nil {
-		if minio.ToErrorResponse(err).Code == "NoSuchBucket" {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("checking if bucket %q exists: %w", bucketName, err)
+	fileStore := &Filestore{
+		Client:     client,
+		URL:        endpoint,
+		BucketName: bucketName,
 	}
 
-	if !bucketExists && !s3Options.bucketAutoCreate {
-		return nil, nil
+	if !s3Options.bucketAutoCreate {
+		return fileStore, nil
+	}
+
+	bucketExists, err := client.BucketExists(ctx, bucketName)
+	if err != nil {
+		return nil, fmt.Errorf("checking if bucket %q exists: %w", bucketName, err)
 	}
 
 	if !bucketExists {
@@ -61,11 +63,7 @@ func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Opti
 		}
 	}
 
-	return &Filestore{
-		Client:     client,
-		URL:        endpoint,
-		BucketName: bucketName,
-	}, nil
+	return fileStore, nil
 }
 
 // Fetch gets an object from the S3 bucket by hash and returns a reader for the object.
