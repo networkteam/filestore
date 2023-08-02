@@ -66,10 +66,55 @@ func NewFilestore(ctx context.Context, endpoint, bucketName string, opts ...Opti
 	return fileStore, nil
 }
 
+func (f *Filestore) StoreHashed(ctx context.Context, r io.Reader, hash string) error {
+	// Check if object already exists
+	_, err := f.Client.StatObject(ctx, f.BucketName, hash, minio.StatObjectOptions{})
+	if err == nil {
+		// Object already exists
+		return nil
+	}
+
+	var size int64 = -1
+	if sizedReader, ok := r.(Sized); ok {
+		size = sizedReader.Size()
+	}
+
+	var contentType, contentDisposition string
+	if typedReader, ok := r.(ContentTyped); ok {
+		contentType = typedReader.ContentType()
+	}
+	if dispoReader, ok := r.(ContentDispositioned); ok {
+		contentDisposition = dispoReader.ContentDisposition()
+	}
+
+	_, err = f.Client.PutObject(ctx, f.BucketName, hash, r, size, minio.PutObjectOptions{
+		ContentType:        contentType,
+		ContentDisposition: contentDisposition,
+	})
+	if err != nil {
+		return fmt.Errorf("putting object: %w", err)
+	}
+
+	return nil
+}
+
+func (f *Filestore) Exists(ctx context.Context, hash string) (bool, error) {
+	// Check if object already exists
+	_, err := f.Client.StatObject(ctx, f.BucketName, hash, minio.StatObjectOptions{})
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			return false, nil
+		}
+		return false, fmt.Errorf("getting object info %q: %w", hash, err)
+	}
+
+	return true, nil
+}
+
 // Fetch gets an object from the S3 bucket by hash and returns a reader for the object.
 // It will stat the object to check for existence. If the object does not exist, it will return ErrNotExist.
-func (s Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
-	readCloser, err := s.Client.GetObject(ctx, s.BucketName, hash, minio.GetObjectOptions{})
+func (f *Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
+	readCloser, err := f.Client.GetObject(ctx, f.BucketName, hash, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("getting object %q: %w", hash, err)
 	}
@@ -88,14 +133,14 @@ func (s Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error
 
 // ImgproxyURLSource implements the ImgproxyURLSourcer interface.
 // It returns a URL to the object that will be understood by imgproxy in the form of "s3://bucket-name/object-key".
-func (s Filestore) ImgproxyURLSource(hash string) (string, error) {
-	return fmt.Sprintf("s3://%s/%s", s.BucketName, hash), nil
+func (f *Filestore) ImgproxyURLSource(hash string) (string, error) {
+	return fmt.Sprintf("s3://%s/%s", f.BucketName, hash), nil
 }
 
 // Iterate iterates over all objects in the S3 bucket and calls the callback with a maxBatch amount of hashes.
 // Iteration will stop if the callback returns an error.
-func (s Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
-	objInfos := s.Client.ListObjects(ctx, s.BucketName, minio.ListObjectsOptions{})
+func (f *Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hashes []string) error) error {
+	objInfos := f.Client.ListObjects(ctx, f.BucketName, minio.ListObjectsOptions{})
 
 	hashes := make([]string, 0, maxBatch)
 
@@ -122,8 +167,8 @@ func (s Filestore) Iterate(ctx context.Context, maxBatch int, callback func(hash
 
 // Remove removes an object from the S3 bucket by hash.
 // It is not guaranteed to error if the hash does not exist.
-func (s Filestore) Remove(ctx context.Context, hash string) error {
-	err := s.Client.RemoveObject(ctx, s.BucketName, hash, minio.RemoveObjectOptions{})
+func (f *Filestore) Remove(ctx context.Context, hash string) error {
+	err := f.Client.RemoveObject(ctx, f.BucketName, hash, minio.RemoveObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("removing object %q: %w", hash, err)
 	}
@@ -131,8 +176,8 @@ func (s Filestore) Remove(ctx context.Context, hash string) error {
 }
 
 // Size returns the size of an object in the S3 bucket by hash.
-func (s Filestore) Size(ctx context.Context, hash string) (int64, error) {
-	object, err := s.Client.GetObject(ctx, s.BucketName, hash, minio.GetObjectOptions{})
+func (f *Filestore) Size(ctx context.Context, hash string) (int64, error) {
+	object, err := f.Client.GetObject(ctx, f.BucketName, hash, minio.GetObjectOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("getting object %q: %w", hash, err)
 	}
@@ -148,7 +193,7 @@ func (s Filestore) Size(ctx context.Context, hash string) (int64, error) {
 // Store stores an object in the S3 bucket by hash.
 // The reader should implement Sized for better performance (the client can optimize the operation given the size and reduce memory usage).
 // The reader can implement ContentTyped or ContentDispositioned to set the content type or content disposition of the object.
-func (s Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
+func (f *Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
 	var size int64 = -1
 	if sizedReader, ok := r.(Sized); ok {
 		size = sizedReader.Size()
@@ -171,7 +216,7 @@ func (s Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
 	}
 	tmpObjectName := fmt.Sprintf("tmp/%s", tmpID)
 
-	_, err = s.Client.PutObject(ctx, s.BucketName, tmpObjectName, hashedReader, size, minio.PutObjectOptions{
+	_, err = f.Client.PutObject(ctx, f.BucketName, tmpObjectName, hashedReader, size, minio.PutObjectOptions{
 		ContentType:        contentType,
 		ContentDisposition: contentDisposition,
 	})
@@ -182,18 +227,18 @@ func (s Filestore) Store(ctx context.Context, r io.Reader) (string, error) {
 	hashBytes := digest.Sum(nil)
 	hashHex := hex.EncodeToString(hashBytes)
 
-	_, err = s.Client.CopyObject(ctx, minio.CopyDestOptions{
-		Bucket: s.BucketName,
+	_, err = f.Client.CopyObject(ctx, minio.CopyDestOptions{
+		Bucket: f.BucketName,
 		Object: hashHex,
 	}, minio.CopySrcOptions{
-		Bucket: s.BucketName,
+		Bucket: f.BucketName,
 		Object: tmpObjectName,
 	})
 	if err != nil {
 		return "", fmt.Errorf("copying temp object %q: %w", tmpObjectName, err)
 	}
 
-	err = s.Client.RemoveObject(ctx, s.BucketName, tmpObjectName, minio.RemoveObjectOptions{})
+	err = f.Client.RemoveObject(ctx, f.BucketName, tmpObjectName, minio.RemoveObjectOptions{})
 	if err != nil {
 		return "", fmt.Errorf("removing temp object: %w", err)
 	}

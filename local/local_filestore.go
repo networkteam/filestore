@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/hashicorp/go-multierror"
 
@@ -138,6 +140,84 @@ func (f *Filestore) Store(ctx context.Context, r io.Reader) (hash string, err er
 	}
 
 	return hashHex, nil
+}
+
+var hashRegex = regexp.MustCompile(`^[a-f0-9]+$`)
+
+func (f *Filestore) StoreHashed(ctx context.Context, r io.Reader, hash string) error {
+	// Check hash is a valid hash (hex encoded)
+	if !hashRegex.MatchString(hash) {
+		return errInvalidHash
+	}
+
+	pathPrefix, err := f.prefixPath(hash)
+	if err != nil {
+		return err
+	}
+
+	targetPath := fmt.Sprintf("%s/%s/%s", f.assetsPath, pathPrefix, hash)
+	// Check if target path exists
+	if _, err = os.Stat(targetPath); err == nil {
+		return nil
+	}
+
+	if err = os.MkdirAll(fmt.Sprintf("%s/%s", f.assetsPath, pathPrefix), 0755); err != nil {
+		return fmt.Errorf("creating asset subdirectory: %w", err)
+	}
+
+	targetFile, err := os.Create(targetPath)
+	if err != nil {
+		return fmt.Errorf("creating target file: %w", err)
+	}
+
+	defer func() {
+		previousErr := err
+
+		if closeErr := targetFile.Close(); closeErr != nil {
+			err = multierror.Append(
+				err,
+				fmt.Errorf("closing target file (with previous error): %w", closeErr),
+			)
+			return
+		}
+
+		if previousErr != nil {
+			if removeErr := os.Remove(targetPath); removeErr != nil {
+				err = multierror.Append(
+					err,
+					fmt.Errorf("removing target file (with previous error): %w", removeErr),
+				)
+				return
+			}
+		}
+	}()
+
+	if _, err = io.Copy(targetFile, r); err != nil {
+		return fmt.Errorf("copying reader: %w", err)
+	}
+
+	err = os.Chmod(targetPath, f.TargetFileMode)
+	if err != nil {
+		return fmt.Errorf("setting file mode: %w", err)
+	}
+
+	return nil
+}
+
+func (f *Filestore) Exists(ctx context.Context, hash string) (bool, error) {
+	prefixPath, err := f.prefixPath(hash)
+	if err != nil {
+		return false, err
+	}
+
+	path := fmt.Sprintf("%s/%s/%s", f.assetsPath, prefixPath, hash)
+	_, err = os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("stat file: %w", err)
+	}
+	return true, nil
 }
 
 // Fetch returns a reader to the file with the given hash.

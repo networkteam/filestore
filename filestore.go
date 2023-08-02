@@ -11,9 +11,20 @@ type Storer interface {
 	Store(ctx context.Context, r io.Reader) (hash string, err error)
 }
 
+// A HashedStorer stores the content of the given reader (e.g. a file) with a pre-calculated hash.
+// The hash can be chosen freely and is not checked against the reader content.
+type HashedStorer interface {
+	StoreHashed(ctx context.Context, r io.Reader, hash string) error
+}
+
 // A Fetcher fetches the content of the given hash in the form of an io.Reader.
 type Fetcher interface {
 	Fetch(ctx context.Context, hash string) (io.ReadCloser, error)
+}
+
+// An Exister checks if the given hash exists in the store.
+type Exister interface {
+	Exists(ctx context.Context, hash string) (bool, error)
 }
 
 // An Iterator iterates over all stored files and returns their hashes in batches.
@@ -42,6 +53,8 @@ type ImgproxyURLSourcer interface {
 // A FileStore bundles all the interfaces above.
 type FileStore interface {
 	Storer
+	HashedStorer
+	Exister
 	Fetcher
 	Iterator
 	Remover

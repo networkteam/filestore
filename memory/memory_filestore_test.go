@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/networkteam/filestore"
+	"github.com/networkteam/filestore/local"
 	"github.com/networkteam/filestore/memory"
 )
 
@@ -31,6 +33,66 @@ func TestFilestore_Store(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87", hash)
+}
+
+func TestFilestore_StoreHashed(t *testing.T) {
+	ctx := context.Background()
+
+	store := memory.NewFilestore()
+
+	t.Run("StoreHashed and Fetch", func(t *testing.T) {
+		r := strings.NewReader("Test content")
+		err := store.StoreHashed(ctx, r, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		// Can be fetched by hash
+		out, err := store.Fetch(ctx, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		defer out.Close()
+
+		content, err := io.ReadAll(out)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Test content", string(content))
+	})
+
+	t.Run("StoreHashed with same hash", func(t *testing.T) {
+		r := strings.NewReader("Updated content")        // Different content!
+		err := store.StoreHashed(ctx, r, "a0b1c2d3e4f5") // But same hash!
+		require.NoError(t, err)
+
+		// Can be fetched by hash
+		out, err := store.Fetch(ctx, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		defer out.Close()
+
+		content, err := io.ReadAll(out)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Test content", string(content))
+	})
+}
+
+func TestFilestore_Exists(t *testing.T) {
+	testDir := t.TempDir()
+	ctx := context.Background()
+
+	store, err := local.NewFilestore(path.Join(testDir, "tmp"), path.Join(testDir, "assets"))
+	require.NoError(t, err)
+
+	r := strings.NewReader("Test content")
+	err = store.StoreHashed(ctx, r, "a0b1c2d3e4f5")
+	require.NoError(t, err)
+
+	exists, err := store.Exists(ctx, "a0b1c2d3e4f5")
+	require.NoError(t, err)
+	assert.Equal(t, true, exists, "Content should exist")
+
+	exists, err = store.Exists(ctx, "b0b1c2d3e4f5")
+	require.NoError(t, err)
+	assert.Equal(t, false, exists, "Content should not exist")
 }
 
 func TestFilestore_ImgproxyURLSource(t *testing.T) {

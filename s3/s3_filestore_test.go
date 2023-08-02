@@ -93,6 +93,68 @@ func TestS3_Store(t *testing.T) {
 	assert.Equal(t, int64(11), size)
 }
 
+func TestFilestore_StoreHashed(t *testing.T) {
+	ctx := context.Background()
+	store := createS3Filestore(t, ctx)
+
+	t.Run("StoreHashed and Fetch", func(t *testing.T) {
+		reader := strings.NewReader("Test content")
+		sizedReader := s3.SizedReader(reader, 12)
+
+		err := store.StoreHashed(ctx, sizedReader, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		// Can be fetched by hash
+		out, err := store.Fetch(ctx, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		defer out.Close()
+
+		content, err := io.ReadAll(out)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Test content", string(content))
+	})
+
+	t.Run("StoreHashed with same hash", func(t *testing.T) {
+		reader := strings.NewReader("Updated content") // Different content!
+		sizedReader := s3.SizedReader(reader, 15)
+
+		err := store.StoreHashed(ctx, sizedReader, "a0b1c2d3e4f5") // But same hash!
+		require.NoError(t, err)
+
+		// Can be fetched by hash
+		out, err := store.Fetch(ctx, "a0b1c2d3e4f5")
+		require.NoError(t, err)
+
+		defer out.Close()
+
+		content, err := io.ReadAll(out)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Test content", string(content))
+	})
+}
+
+func TestFilestore_Exists(t *testing.T) {
+	ctx := context.Background()
+	store := createS3Filestore(t, ctx)
+
+	reader := strings.NewReader("Test content")
+	sizedReader := s3.SizedReader(reader, 12)
+
+	err := store.StoreHashed(ctx, sizedReader, "a0b1c2d3e4f5")
+	require.NoError(t, err)
+
+	exists, err := store.Exists(ctx, "a0b1c2d3e4f5")
+	require.NoError(t, err)
+	assert.Equal(t, true, exists, "Content should exist")
+
+	exists, err = store.Exists(ctx, "b0b1c2d3e4f5")
+	require.NoError(t, err)
+	assert.Equal(t, false, exists, "Content should not exist")
+}
+
 func TestS3_Remove(t *testing.T) {
 	ctx := context.Background()
 	store := createS3Filestore(t, ctx)

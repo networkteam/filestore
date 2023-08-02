@@ -46,6 +46,32 @@ func (f *Filestore) Store(ctx context.Context, r io.Reader) (hash string, err er
 	return hash, nil
 }
 
+func (f *Filestore) StoreHashed(ctx context.Context, r io.Reader, hash string) error {
+	f.mx.Lock()
+	defer f.mx.Unlock()
+
+	if _, ok := f.files[hash]; ok {
+		return nil
+	}
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	f.files[hash] = data
+
+	return nil
+}
+
+func (f *Filestore) Exists(ctx context.Context, hash string) (bool, error) {
+	f.mx.RLock()
+	defer f.mx.RUnlock()
+
+	_, ok := f.files[hash]
+	return ok, nil
+}
+
 // Fetch implements filestore.Fetcher.
 func (f *Filestore) Fetch(ctx context.Context, hash string) (io.ReadCloser, error) {
 	f.mx.RLock()
